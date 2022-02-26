@@ -123,23 +123,26 @@ class PointCloud(geometry.Geometry):
                        eps: float,
                        vec: jnp.ndarray = None,
                        axis: int = 0) -> jnp.ndarray:
-    if not self._online:
-      return super().apply_lse_kernel(f, g, eps, vec, axis)
+    def body0(carry, ix: int):
+      f, g, eps, vec = carry
+      norm_y = self._norm_y if self._axis_norm is None else self._norm_y[ix]
+      res = _apply_lse_kernel_xy(self.x, self.y[ix], self._norm_x, norm_y, f, g[ix], eps, vec, self._cost_fn, self.power)
+      return carry, res
 
-    app = jax.vmap(
-        _apply_lse_kernel_xy,
-        in_axes=[
-            None, 0, None, self._axis_norm, None, 0, None, None, None, None
-        ])
+    def body1(carry, ix: int):
+      g, f, eps, vec = carry
+      norm_x = self._norm_x if self._axis_norm is None else self._norm_x[ix]
+      res = _apply_lse_kernel_xy(self.y, self.x[ix], self._norm_y, norm_x, g, f[ix], eps, vec, self._cost_fn, self.power)
+      return carry, res
 
     if axis == 0:
-      h_res, h_sgn = app(self.x, self.y, self._norm_x, self._norm_y, f, g, eps,
-                         vec, self._cost_fn, self.power)
+      _, (h_res, h_sgn) = jax.lax.scan(body0, init=(f, g, eps, vec), xs=jnp.arange(g.shape[0]))
       h_res = eps * h_res - jnp.where(jnp.isfinite(g), g, 0)
-    if axis == 1:
-      h_res, h_sgn = app(self.y, self.x, self._norm_y, self._norm_x, g, f, eps,
-                         vec, self._cost_fn, self.power)
+    elif axis == 1:
+      _, (h_res, h_sgn) = jax.lax.scan(body1, init=(g, f, eps, vec), xs=jnp.arange(f.shape[0]))
       h_res = eps * h_res - jnp.where(jnp.isfinite(f), f, 0)
+    else:
+      raise ValueError(axis)
     return h_res, h_sgn
 
   def apply_kernel(self,
