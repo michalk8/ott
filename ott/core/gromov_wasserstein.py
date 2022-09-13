@@ -99,7 +99,6 @@ class GWState(NamedTuple):
     linear_state: State used to solve and store solutions to the local
       linearization of GW.
     linear_pb: Local linearization of the quadratic GW problem.
-    old_transport_mass: Intermediary value of the mass of the transport matrix.
   """
 
   costs: jnp.ndarray
@@ -236,7 +235,6 @@ class GromovWasserstein(was_solver.WassersteinSolver):
     linear_state = self.linear_ot_solver(init)
     num_iter = self.max_iterations
     transport_mass = prob.init_transport_mass()
-
     if self.store_inner_errors:
       errors = -jnp.ones((num_iter, self.linear_ot_solver.outer_iterations))
     else:
