@@ -254,7 +254,7 @@ class QuadraticProblem:
     eps = epsilon._target_init
     cost = regulariser(self.tau_a) * mu.kl(marginal_1, self.a)
     cost += regulariser(self.tau_b) * mu.kl(marginal_2, self.b)
-    cost += eps * jsp.entr(transport_matrix.ravel())
+    cost += eps * jsp.entr(transport_matrix.ravel()).sum()
     return cost
 
   def init_transport(self) -> jnp.ndarray:
