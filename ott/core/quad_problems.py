@@ -17,10 +17,12 @@ from typing import Callable, NamedTuple, Optional, Tuple, Union
 
 import jax
 import jax.numpy as jnp
+import jax.scipy.special as jsp
 
 # Because Protocol is not available in Python < 3.8
 from typing_extensions import Literal, Protocol
 
+from ott.core import _math_utils as mu
 from ott.core import linear_problems, sinkhorn_lr
 from ott.geometry import epsilon_scheduler, geometry, low_rank, pointcloud
 
@@ -214,8 +216,7 @@ class QuadraticProblem:
       transport_matrix: jnp.ndarray,
       marginal_1: jnp.ndarray,
       marginal_2: jnp.ndarray,
-      epsilon: float,
-      delta: float = 1e-9
+      epsilon: epsilon_scheduler.Epsilon,
   ) -> float:
     r"""Calculate cost term from the quadratic divergence when unbalanced.
 
@@ -242,26 +243,18 @@ class QuadraticProblem:
       marginal_2: jnp.ndarray<float>[num_b,], marginal of the transport matrix
         for samples from :attr:`geom_yy`.
       epsilon: regulariser.
-      delta: small quantity to avoid diverging KLs.
 
     Returns:
       The cost term.
     """
 
     def regulariser(tau: float) -> float:
-      return epsilon._target_init * tau / (1.0 - tau) if tau != 1.0 else 0
+      return eps * tau / (1.0 - tau) if tau != 1.0 else 0.
 
-    marginal_1loga = jax.scipy.special.xlogy(marginal_1, self.a).sum()
-    marginal_2logb = jax.scipy.special.xlogy(marginal_2, self.b).sum()
-    cost = regulariser(
-        self.tau_a
-    ) * (-jax.scipy.special.entr(marginal_1).sum() - marginal_1loga)
-    cost += regulariser(
-        self.tau_b
-    ) * (-jax.scipy.special.entr(marginal_2).sum() - marginal_2logb)
-    cost += epsilon._target_init * jax.scipy.special.xlogy(
-        transport_matrix, transport_matrix
-    ).sum()
+    eps = epsilon._target_init
+    cost = regulariser(self.tau_a) * mu.kl(marginal_1, self.a)
+    cost += regulariser(self.tau_b) * mu.kl(marginal_2, self.b)
+    cost += eps * jsp.entr(transport_matrix.ravel())
     return cost
 
   def init_transport(self) -> jnp.ndarray:
